@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -30,11 +31,18 @@ export default function Home() {
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [currentLesson, setCurrentLesson] = useState<Lesson | null>(null);
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadData() {
+    async function loadInitialData() {
       try {
+        // Verificar se usuário está logado
+        const { data: authData } = await supabase.auth.getUser();
+        const currentUser = authData?.user || null;
+        setUser(currentUser);
+
+        // Buscar disciplinas do edital
         const { data: discData } = await supabase
           .from('disciplines')
           .select(`
@@ -57,50 +65,18 @@ export default function Home() {
           setDisciplines(discData as unknown as Discipline[]);
           const firstLesson = discData[0]?.topics[0]?.lessons[0];
           if (firstLesson) setCurrentLesson(firstLesson);
-        } else {
-          const mockDisciplines: Discipline[] = [
-            {
-              id: '1',
-              title: 'Língua Portuguesa',
-              topics: [
-                {
-                  id: 't1',
-                  title: 'Regência Verbal/Nominal e Crase',
-                  lessons: [
-                    { id: 'l1', title: 'Regência e Crase Sem Segredos', youtube_video_id: 'dQw4w9WgXcQ' }
-                  ]
-                }
-              ]
-            },
-            {
-              id: '2',
-              title: 'Direito Constitucional',
-              topics: [
-                {
-                  id: 't2',
-                  title: 'Direitos e Garantias Fundamentais (Art. 5º)',
-                  lessons: [
-                    { id: 'l2', title: 'Artigo 5º da CF/88 Completo', youtube_video_id: 'dQw4w9WgXcQ' }
-                  ]
-                }
-              ]
-            },
-            {
-              id: '3',
-              title: 'Legislação Especial e Trânsito',
-              topics: [
-                {
-                  id: 't3',
-                  title: 'Estatuto Geral das Guardas Municipais (Lei 13.022/14)',
-                  lessons: [
-                    { id: 'l3', title: 'Lei 13.022/14 - Teoria e Questões', youtube_video_id: 'dQw4w9WgXcQ' }
-                  ]
-                }
-              ]
-            }
-          ];
-          setDisciplines(mockDisciplines);
-          setCurrentLesson(mockDisciplines[0].topics[0].lessons[0]);
+        }
+
+        // Se logado, carregar progresso do banco
+        if (currentUser) {
+          const { data: progressData } = await supabase
+            .from('user_progress')
+            .select('lesson_id')
+            .eq('user_id', currentUser.id);
+
+          if (progressData) {
+            setCompletedLessons(progressData.map((p) => p.lesson_id));
+          }
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
@@ -109,15 +85,39 @@ export default function Home() {
       }
     }
 
-    loadData();
+    loadInitialData();
   }, []);
 
-  const toggleComplete = (lessonId: string) => {
-    if (completedLessons.includes(lessonId)) {
+  const toggleComplete = async (lessonId: string) => {
+    if (!user) {
+      alert('Faça login para salvar seu progresso permanentemente!');
+    }
+
+    const isDone = completedLessons.includes(lessonId);
+
+    if (isDone) {
       setCompletedLessons(completedLessons.filter((id) => id !== lessonId));
+      if (user) {
+        await supabase
+          .from('user_progress')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('lesson_id', lessonId);
+      }
     } else {
       setCompletedLessons([...completedLessons, lessonId]);
+      if (user) {
+        await supabase
+          .from('user_progress')
+          .insert({ user_id: user.id, lesson_id: lessonId, status: 'COMPLETED' });
+      }
     }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setCompletedLessons([]);
   };
 
   const totalLessons = disciplines.reduce(
@@ -138,14 +138,32 @@ export default function Home() {
           </p>
         </div>
 
-        <div style={{ minWidth: '220px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-            <span>Seu Progresso:</span>
-            <span style={{ color: '#34d399', fontWeight: 'bold' }}>{progressPercent}%</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          <div style={{ minWidth: '180px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+              <span>Progresso:</span>
+              <span style={{ color: '#34d399', fontWeight: 'bold' }}>{progressPercent}%</span>
+            </div>
+            <div style={{ width: '100%', height: '8px', backgroundColor: '#334155', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s ease' }} />
+            </div>
           </div>
-          <div style={{ width: '100%', height: '8px', backgroundColor: '#334155', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s ease' }} />
-          </div>
+
+          {user ? (
+            <button
+              onClick={handleLogout}
+              style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}
+            >
+              Sair
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              style={{ backgroundColor: '#3b82f6', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}
+            >
+              Entrar / Cadastrar
+            </Link>
+          )}
         </div>
       </header>
 
@@ -187,7 +205,7 @@ export default function Home() {
             </div>
           ) : (
             <div style={{ backgroundColor: '#1e293b', padding: '3rem', textAlign: 'center', borderRadius: '8px' }}>
-              <p style={{ color: '#94a3b8' }}>{loading ? 'Carregando edital e aulas...' : 'Nenhuma aula selecionada.'}</p>
+              <p style={{ color: '#94a3b8' }}>{loading ? 'Carregando edital...' : 'Nenhuma aula encontrada.'}</p>
             </div>
           )}
         </section>
@@ -203,14 +221,14 @@ export default function Home() {
                 {disc.title}
               </h3>
 
-              {disc.topics.map((top) => (
+              {disc.topics?.map((top) => (
                 <div key={top.id} style={{ marginLeft: '0.5rem', marginBottom: '0.75rem' }}>
                   <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 600 }}>
                     • {top.title}
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginLeft: '0.75rem' }}>
-                    {top.lessons.map((lesson) => {
+                    {top.lessons?.map((lesson) => {
                       const isSelected = currentLesson?.id === lesson.id;
                       const isDone = completedLessons.includes(lesson.id);
 
