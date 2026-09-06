@@ -12,6 +12,7 @@ interface Lesson {
   id: string;
   title: string;
   youtube_video_id: string;
+  pdf_url?: string;
   lesson_type?: string;
 }
 
@@ -34,15 +35,19 @@ export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Estados de Anotações e Abas
+  const [activeTab, setActiveTab] = useState<'notes' | 'material'>('notes');
+  const [noteContent, setNoteContent] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteStatus, setNoteStatus] = useState('');
+
   useEffect(() => {
     async function loadInitialData() {
       try {
-        // Verificar se usuário está logado
         const { data: authData } = await supabase.auth.getUser();
         const currentUser = authData?.user || null;
         setUser(currentUser);
 
-        // Buscar disciplinas do edital
         const { data: discData } = await supabase
           .from('disciplines')
           .select(`
@@ -55,6 +60,7 @@ export default function Home() {
                 id,
                 title,
                 youtube_video_id,
+                pdf_url,
                 lesson_type
               )
             )
@@ -64,10 +70,12 @@ export default function Home() {
         if (discData && discData.length > 0) {
           setDisciplines(discData as unknown as Discipline[]);
           const firstLesson = discData[0]?.topics[0]?.lessons[0];
-          if (firstLesson) setCurrentLesson(firstLesson);
+          if (firstLesson) {
+            setCurrentLesson(firstLesson);
+            if (currentUser) loadUserNote(currentUser.id, firstLesson.id);
+          }
         }
 
-        // Se logado, carregar progresso do banco
         if (currentUser) {
           const { data: progressData } = await supabase
             .from('user_progress')
@@ -87,6 +95,49 @@ export default function Home() {
 
     loadInitialData();
   }, []);
+
+  const loadUserNote = async (userId: string, lessonId: string) => {
+    setNoteContent('');
+    setNoteStatus('');
+    const { data } = await supabase
+      .from('user_notes')
+      .select('content')
+      .eq('user_id', userId)
+      .eq('lesson_id', lessonId)
+      .single();
+
+    if (data) {
+      setNoteContent(data.content || '');
+    }
+  };
+
+  const handleSelectLesson = (lesson: Lesson) => {
+    setCurrentLesson(lesson);
+    if (user) {
+      loadUserNote(user.id, lesson.id);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!user || !currentLesson) return;
+    setSavingNote(true);
+    setNoteStatus('');
+
+    const { error } = await supabase
+      .from('user_notes')
+      .upsert(
+        { user_id: user.id, lesson_id: currentLesson.id, content: noteContent, updated_at: new Date() },
+        { onConflict: 'user_id,lesson_id' }
+      );
+
+    setSavingNote(false);
+    if (error) {
+      setNoteStatus('❌ Erro ao salvar anotação.');
+    } else {
+      setNoteStatus('✅ Anotação salva com sucesso!');
+      setTimeout(() => setNoteStatus(''), 3000);
+    }
+  };
 
   const toggleComplete = async (lessonId: string) => {
     if (!user) {
@@ -118,6 +169,7 @@ export default function Home() {
     await supabase.auth.signOut();
     setUser(null);
     setCompletedLessons([]);
+    setNoteContent('');
   };
 
   const totalLessons = disciplines.reduce(
@@ -138,8 +190,8 @@ export default function Home() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <div style={{ minWidth: '180px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: '150px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
               <span>Progresso:</span>
               <span style={{ color: '#34d399', fontWeight: 'bold' }}>{progressPercent}%</span>
@@ -148,12 +200,14 @@ export default function Home() {
               <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s ease' }} />
             </div>
           </div>
-<Link
-  href="/questoes"
-  style={{ backgroundColor: '#0284c7', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}
->
-  Treinar Questões
-</Link>
+
+          <Link
+            href="/questoes"
+            style={{ backgroundColor: '#0284c7', color: '#fff', textDecoration: 'none', padding: '0.5rem 0.85rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}
+          >
+            Treinar Questões
+          </Link>
+
           {user ? (
             <button
               onClick={handleLogout}
@@ -166,7 +220,7 @@ export default function Home() {
               href="/login"
               style={{ backgroundColor: '#3b82f6', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}
             >
-              Entrar / Cadastrar
+              Entrar
             </Link>
           )}
         </div>
@@ -200,12 +254,117 @@ export default function Home() {
                     padding: '0.6rem 1.2rem',
                     borderRadius: '6px',
                     fontWeight: 'bold',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s'
+                    cursor: 'pointer'
                   }}
                 >
                   {completedLessons.includes(currentLesson.id) ? '✓ Concluída' : 'Marcar como Concluída'}
                 </button>
+              </div>
+
+              {/* Seção de Abas: Anotações & Material */}
+              <div style={{ marginTop: '1.5rem', borderTop: '1px solid #334155', paddingTop: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <button
+                    onClick={() => setActiveTab('notes')}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      backgroundColor: activeTab === 'notes' ? '#38bdf8' : '#0f172a',
+                      color: activeTab === 'notes' ? '#0f172a' : '#94a3b8',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    📝 Anotações Pessoais
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('material')}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      backgroundColor: activeTab === 'material' ? '#38bdf8' : '#0f172a',
+                      color: activeTab === 'material' ? '#0f172a' : '#94a3b8',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    📄 Material em PDF
+                  </button>
+                </div>
+
+                {activeTab === 'notes' ? (
+                  <div>
+                    {user ? (
+                      <>
+                        <textarea
+                          value={noteContent}
+                          onChange={(e) => setNoteContent(e.target.value)}
+                          placeholder="Escreva aqui seus resumos e anotações sobre esta aula..."
+                          rows={5}
+                          style={{
+                            width: '100%',
+                            padding: '0.75rem',
+                            borderRadius: '6px',
+                            backgroundColor: '#0f172a',
+                            border: '1px solid #475569',
+                            color: '#fff',
+                            resize: 'vertical',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+                          <span style={{ fontSize: '0.85rem', color: '#34d399' }}>{noteStatus}</span>
+                          <button
+                            onClick={handleSaveNote}
+                            disabled={savingNote}
+                            style={{
+                              backgroundColor: '#10b981',
+                              color: '#fff',
+                              border: 'none',
+                              padding: '0.5rem 1rem',
+                              borderRadius: '4px',
+                              fontWeight: 'bold',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {savingNote ? 'Salvando...' : 'Salvar Anotação'}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                        Faça <Link href="/login" style={{ color: '#38bdf8' }}>login</Link> para anotar e salvar seus resumos nesta aula.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ padding: '0.5rem 0' }}>
+                    {currentLesson.pdf_url ? (
+                      <a
+                        href={currentLesson.pdf_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'inline-block',
+                          backgroundColor: '#0284c7',
+                          color: '#fff',
+                          padding: '0.6rem 1.2rem',
+                          borderRadius: '6px',
+                          textDecoration: 'none',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        📥 Baixar Material em PDF da Aula
+                      </a>
+                    ) : (
+                      <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                        Nenhum arquivo em PDF anexado para esta aula no momento.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -240,7 +399,7 @@ export default function Home() {
                       return (
                         <button
                           key={lesson.id}
-                          onClick={() => setCurrentLesson(lesson)}
+                          onClick={() => handleSelectLesson(lesson)}
                           style={{
                             textAlign: 'left',
                             backgroundColor: isSelected ? '#0284c7' : '#0f172a',
