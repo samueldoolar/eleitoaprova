@@ -148,7 +148,12 @@ export default function Home() {
               <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s ease' }} />
             </div>
           </div>
-
+<Link
+  href="/questoes"
+  style={{ backgroundColor: '#0284c7', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}
+>
+  Treinar Questões
+</Link>
           {user ? (
             <button
               onClick={handleLogout}
