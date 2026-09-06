@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Inicialização do Supabase com as chaves configuradas na Vercel
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -33,11 +32,9 @@ export default function Home() {
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Carregar dados do Supabase ao abrir a página
   useEffect(() => {
     async function loadData() {
       try {
-        // Buscar disciplinas, tópicos e aulas
         const { data: discData } = await supabase
           .from('disciplines')
           .select(`
@@ -58,11 +55,9 @@ export default function Home() {
 
         if (discData && discData.length > 0) {
           setDisciplines(discData as unknown as Discipline[]);
-          // Selecionar a primeira aula por padrão
           const firstLesson = discData[0]?.topics[0]?.lessons[0];
           if (firstLesson) setCurrentLesson(firstLesson);
         } else {
-          // Dados de demonstração caso o banco ainda esteja sendo populado
           const mockDisciplines: Discipline[] = [
             {
               id: '1',
@@ -117,7 +112,6 @@ export default function Home() {
     loadData();
   }, []);
 
-  // Alternar conclusão da aula
   const toggleComplete = (lessonId: string) => {
     if (completedLessons.includes(lessonId)) {
       setCompletedLessons(completedLessons.filter((id) => id !== lessonId));
@@ -126,7 +120,6 @@ export default function Home() {
     }
   };
 
-  // Cálculo de progresso total
   const totalLessons = disciplines.reduce(
     (acc, disc) => acc + disc.topics.reduce((tAcc, top) => tAcc + top.lessons.length, 0),
     0
@@ -135,7 +128,6 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Cabeçalho */}
       <header style={{ backgroundColor: '#1e293b', padding: '1rem 2rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold', color: '#38bdf8' }}>
@@ -146,7 +138,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Barra de Progresso */}
         <div style={{ minWidth: '220px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
             <span>Seu Progresso:</span>
@@ -158,10 +149,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Conteúdo Principal */}
       <main style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
-        
-        {/* Lado Esquerdo: Player de Vídeo */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {currentLesson ? (
             <div style={{ backgroundColor: '#1e293b', borderRadius: '8px', padding: '1rem', border: '1px solid #334155' }}>
@@ -204,7 +192,6 @@ export default function Home() {
           )}
         </section>
 
-        {/* Lado Direito: Lista do Edital e Aulas */}
         <aside style={{ backgroundColor: '#1e293b', borderRadius: '8px', padding: '1rem', border: '1px solid #334155', maxHeight: '80vh', overflowY: 'auto' }}>
           <h2 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', color: '#38bdf8', borderBottom: '1px solid #334155', paddingBottom: '0.5rem' }}>
             Conteúdo Programático (Edital)
@@ -242,7 +229,7 @@ export default function Home() {
                             fontSize: '0.8rem',
                             cursor: 'pointer',
                             display: 'flex',
-                            justify: 'space-between',
+                            justifyContent: 'space-between',
                             alignItems: 'center'
                           }}
                         >
@@ -259,7 +246,6 @@ export default function Home() {
             </div>
           ))}
         </aside>
-
       </main>
     </div>
   );
