@@ -8,6 +8,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// ⚠️ DIGITE AQUI O SEU E-MAIL DE ADMINISTRADOR:
+const ADMIN_EMAIL = 'samueldoolar@gmail.com';
+
 interface Discipline {
   id: string;
   title: string;
@@ -20,6 +23,9 @@ interface Topic {
 }
 
 export default function AdminPanel() {
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
   const [activeTab, setActiveTab] = useState<'lesson' | 'question'>('lesson');
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -47,7 +53,18 @@ export default function AdminPanel() {
   const [status, setStatus] = useState('');
 
   useEffect(() => {
-    loadDisciplines();
+    async function checkAdminAuth() {
+      const { data } = await supabase.auth.getUser();
+      const user = data?.user || null;
+      setCurrentUser(user);
+      setCheckingAuth(false);
+
+      if (user && (user.email === ADMIN_EMAIL || ADMIN_EMAIL === 'seu-email@admin.com')) {
+        loadDisciplines();
+      }
+    }
+
+    checkAdminAuth();
   }, []);
 
   useEffect(() => {
@@ -164,11 +181,40 @@ export default function AdminPanel() {
     }
   };
 
+  if (checkingAuth) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        Verificando permissões de acesso...
+      </div>
+    );
+  }
+
+  const isAuthorized = currentUser && (currentUser.email === ADMIN_EMAIL || ADMIN_EMAIL === 'seu-email@admin.com');
+
+  if (!isAuthorized) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ backgroundColor: '#1e293b', padding: '2rem', borderRadius: '8px', border: '1px solid #334155', textAlign: 'center', maxWidth: '400px' }}>
+          <h1 style={{ color: '#ef4444', fontSize: '1.5rem', marginTop: 0 }}>Acesso Restrito 🔒</h1>
+          <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+            Apenas administradores autorizados podem acessar este painel.
+          </p>
+          <Link href="/login" style={{ display: 'inline-block', marginTop: '1rem', backgroundColor: '#3b82f6', color: '#fff', padding: '0.6rem 1.2rem', borderRadius: '4px', textDecoration: 'none', fontWeight: 'bold' }}>
+            Fazer Login como Administrador
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc', padding: '2rem 1rem', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: '650px', margin: '0 auto', backgroundColor: '#1e293b', padding: '2rem', borderRadius: '8px', border: '1px solid #334155' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#38bdf8' }}>Painel do Administrador</h1>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#38bdf8' }}>Painel do Administrador</h1>
+            <span style={{ fontSize: '0.75rem', color: '#34d399' }}>Logado como: {currentUser?.email}</span>
+          </div>
           <Link href="/" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.85rem' }}>← Voltar ao Site</Link>
         </div>
 
