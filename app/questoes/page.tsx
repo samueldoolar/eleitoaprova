@@ -1,66 +1,76 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface Question {
   id: string;
-  discipline: string;
   statement: string;
   options: string[];
   correctOptionIndex: number;
   explanation: string;
+  discipline: string;
 }
 
-const mockQuestions: Question[] = [
-  {
-    id: 'q1',
-    discipline: 'Legislação Especial (Lei 13.022/14)',
-    statement: 'Segundo o Estatuto Geral das Guardas Municipais (Lei nº 13.022/2014), é princípio mínimo de atuação das guardas municipais:',
-    options: [
-      'A) Uso da força letal como primeira opção de resposta.',
-      'B) Proteção dos direitos humanos fundamentais e do exercício da cidadania.',
-      'C) Subordinação direta e exclusiva ao Exército Brasileiro.',
-      'D) Aplicação de penas privativas de liberdade em âmbito municipal.'
-    ],
-    correctOptionIndex: 1,
-    explanation: 'Gabarito: B. O Art. 3º da Lei 13.022/14 estabelece como princípios mínimos a proteção dos direitos humanos fundamentais, preservação da vida e compromisso com a evolução social.'
-  },
-  {
-    id: 'q2',
-    discipline: 'Direito Constitucional',
-    statement: 'Nos termos do Art. 5º da Constituição Federal de 1988, assinale a alternativa correta:',
-    options: [
-      'A) É livre a manifestação do pensamento, sendo permitido o anonimato.',
-      'B) A casa é asilo inviolável do indivíduo, ninguém nela podendo penetrar sem consentimento do morador, salvo em caso de flagrante delito ou desastre.',
-      'C) A prática do racismo constitui crime afiançável e prescritível.',
-      'D) Haverá penas de morte em qualquer circunstância no território nacional.'
-    ],
-    correctOptionIndex: 1,
-    explanation: 'Gabarito: B. Conforme Art. 5º, XI da CF/88. O anonimato é vedado (inciso IV) e o racismo é inafiançável e imprescritível (inciso XLII).'
-  },
-  {
-    id: 'q3',
-    discipline: 'Língua Portuguesa',
-    statement: 'Assinale a opção em que o uso do sinal indicativo de crase é OBRIGATÓRIO:',
-    options: [
-      'A) Fomos caminhar a pé pelo centro de Itajaí.',
-      'B) Ele entregou o relatório a uma secretária.',
-      'C) Chegamos à cidade de Itajaí no início da noite.',
-      'D) O candidato começou a estudar logo cedo.'
-    ],
-    correctOptionIndex: 2,
-    explanation: 'Gabarito: C. "Chegamos à cidade" possui a fusão da preposição "a" exigida pelo verbo chegar com o artigo feminino "a" que especifica a palavra cidade.'
-  }
-];
-
 export default function QuestaoPage() {
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [score, setScore] = useState({ correct: 0, wrong: 0 });
+  const [loading, setLoading] = useState(true);
 
-  const currentQ = mockQuestions[currentIndex];
+  useEffect(() => {
+    async function fetchQuestions() {
+      try {
+        const { data, error } = await supabase
+          .from('questions')
+          .select(`
+            id,
+            statement,
+            option_a,
+            option_b,
+            option_c,
+            option_d,
+            correct_option,
+            explanation,
+            disciplines ( title )
+          `);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const formatted = data.map((q: any) => ({
+            id: q.id,
+            statement: q.statement,
+            options: [
+              `A) ${q.option_a}`,
+              `B) ${q.option_b}`,
+              `C) ${q.option_c}`,
+              `D) ${q.option_d}`
+            ],
+            correctOptionIndex: q.correct_option,
+            explanation: q.explanation || 'Sem explicação disponível.',
+            discipline: q.disciplines?.title || 'Conhecimentos Gerais'
+          }));
+          setQuestions(formatted);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar questões:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchQuestions();
+  }, []);
+
+  const currentQ = questions[currentIndex];
 
   const handleSelectOption = (index: number) => {
     if (showAnswer) return;
@@ -68,7 +78,7 @@ export default function QuestaoPage() {
   };
 
   const handleConfirm = () => {
-    if (selectedOption === null) return;
+    if (selectedOption === null || !currentQ) return;
     setShowAnswer(true);
 
     if (selectedOption === currentQ.correctOptionIndex) {
@@ -81,10 +91,10 @@ export default function QuestaoPage() {
   const handleNext = () => {
     setSelectedOption(null);
     setShowAnswer(false);
-    if (currentIndex < mockQuestions.length - 1) {
+    if (currentIndex < questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      setCurrentIndex(0); // Reiniciar banco
+      setCurrentIndex(0);
     }
   };
 
@@ -101,7 +111,6 @@ export default function QuestaoPage() {
       </header>
 
       <main style={{ maxWidth: '800px', margin: '2rem auto', padding: '0 1rem' }}>
-        {/* Placar de desempenho */}
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
           <div style={{ flex: 1, backgroundColor: '#1e293b', padding: '1rem', borderRadius: '8px', border: '1px solid #334155', textAlign: 'center' }}>
             <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Acertos</span>
@@ -113,97 +122,104 @@ export default function QuestaoPage() {
           </div>
         </div>
 
-        {/* Card da Questão */}
-        <div style={{ backgroundColor: '#1e293b', borderRadius: '8px', padding: '1.5rem', border: '1px solid #334155' }}>
-          <span style={{ fontSize: '0.75rem', backgroundColor: '#0284c7', color: '#fff', padding: '0.25rem 0.5rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>
-            {currentQ.discipline}
-          </span>
-
-          <p style={{ marginTop: '1rem', fontSize: '1.05rem', lineHeight: '1.6', color: '#f1f5f9' }}>
-            <strong>Questão {currentIndex + 1}:</strong> {currentQ.statement}
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
-            {currentQ.options.map((option, idx) => {
-              let bg = '#0f172a';
-              let borderColor = '#334155';
-
-              if (selectedOption === idx) {
-                borderColor = '#38bdf8';
-              }
-
-              if (showAnswer) {
-                if (idx === currentQ.correctOptionIndex) {
-                  bg = '#065f46';
-                  borderColor = '#34d399';
-                } else if (selectedOption === idx) {
-                  bg = '#7f1d1d';
-                  borderColor = '#f87171';
-                }
-              }
-
-              return (
-                <button
-                  key={idx}
-                  onClick={() => handleSelectOption(idx)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '0.85rem 1rem',
-                    borderRadius: '6px',
-                    backgroundColor: bg,
-                    border: `1px solid ${borderColor}`,
-                    color: '#fff',
-                    cursor: showAnswer ? 'default' : 'pointer',
-                    fontSize: '0.95rem'
-                  }}
-                >
-                  {option}
-                </button>
-              );
-            })}
+        {loading ? (
+          <div style={{ backgroundColor: '#1e293b', padding: '3rem', textAlign: 'center', borderRadius: '8px', color: '#94a3b8' }}>
+            Carregando questões do banco de dados...
           </div>
+        ) : currentQ ? (
+          <div style={{ backgroundColor: '#1e293b', borderRadius: '8px', padding: '1.5rem', border: '1px solid #334155' }}>
+            <span style={{ fontSize: '0.75rem', backgroundColor: '#0284c7', color: '#fff', padding: '0.25rem 0.5rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>
+              {currentQ.discipline}
+            </span>
 
-          {!showAnswer ? (
-            <button
-              onClick={handleConfirm}
-              disabled={selectedOption === null}
-              style={{
-                marginTop: '1.5rem',
-                width: '100%',
-                backgroundColor: selectedOption !== null ? '#3b82f6' : '#475569',
-                color: '#fff',
-                border: 'none',
-                padding: '0.85rem',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                cursor: selectedOption !== null ? 'pointer' : 'not-allowed'
-              }}
-            >
-              Responder
-            </button>
-          ) : (
-            <div style={{ marginTop: '1.5rem' }}>
-              <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '6px', borderLeft: '4px solid #38bdf8', marginBottom: '1rem', fontSize: '0.9rem', color: '#cbd5e1' }}>
-                {currentQ.explanation}
-              </div>
+            <p style={{ marginTop: '1rem', fontSize: '1.05rem', lineHeight: '1.6', color: '#f1f5f9' }}>
+              <strong>Questão {currentIndex + 1}:</strong> {currentQ.statement}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
+              {currentQ.options.map((option, idx) => {
+                let bg = '#0f172a';
+                let borderColor = '#334155';
+
+                if (selectedOption === idx) borderColor = '#38bdf8';
+
+                if (showAnswer) {
+                  if (idx === currentQ.correctOptionIndex) {
+                    bg = '#065f46';
+                    borderColor = '#34d399';
+                  } else if (selectedOption === idx) {
+                    bg = '#7f1d1d';
+                    borderColor = '#f87171';
+                  }
+                }
+
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => handleSelectOption(idx)}
+                    style={{
+                      textAlign: 'left',
+                      padding: '0.85rem 1rem',
+                      borderRadius: '6px',
+                      backgroundColor: bg,
+                      border: `1px solid ${borderColor}`,
+                      color: '#fff',
+                      cursor: showAnswer ? 'default' : 'pointer',
+                      fontSize: '0.95rem'
+                    }}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+
+            {!showAnswer ? (
               <button
-                onClick={handleNext}
+                onClick={handleConfirm}
+                disabled={selectedOption === null}
                 style={{
+                  marginTop: '1.5rem',
                   width: '100%',
-                  backgroundColor: '#10b981',
+                  backgroundColor: selectedOption !== null ? '#3b82f6' : '#475569',
                   color: '#fff',
                   border: 'none',
                   padding: '0.85rem',
                   borderRadius: '6px',
                   fontWeight: 'bold',
-                  cursor: 'pointer'
+                  cursor: selectedOption !== null ? 'pointer' : 'not-allowed'
                 }}
               >
-                Próxima Questão →
+                Responder
               </button>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div style={{ marginTop: '1.5rem' }}>
+                <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '6px', borderLeft: '4px solid #38bdf8', marginBottom: '1rem', fontSize: '0.9rem', color: '#cbd5e1' }}>
+                  <strong>Gabarito Comentado:</strong> {currentQ.explanation}
+                </div>
+                <button
+                  onClick={handleNext}
+                  style={{
+                    width: '100%',
+                    backgroundColor: '#10b981',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '0.85rem',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Próxima Questão →
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ backgroundColor: '#1e293b', padding: '3rem', textAlign: 'center', borderRadius: '8px', color: '#94a3b8' }}>
+            Nenhuma questão cadastrada ainda. Acesse o <Link href="/admin" style={{ color: '#38bdf8' }}>Painel do Administrador</Link> para adicionar questões.
+          </div>
+        )}
       </main>
     </div>
   );
